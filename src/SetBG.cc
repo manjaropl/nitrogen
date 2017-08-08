@@ -128,6 +128,31 @@ std::vector<SetBG::RootWindowData> SetBG::find_desktop_windows(Display *xdisp, W
             if (bgRw.type != SetBG::IGNORE)
                 retVec.push_back(bgRw);
         }
+    } else {
+        // mutter now just sets a single property, WM_NAME = "mutter guard window", so detect that
+        Atom nameatom = XInternAtom(xdisp, "WM_NAME", False);
+        XTextProperty tprop;
+
+        gchar **list;
+        gint num;
+
+        XErrorHandler old_x_error_handler = XSetErrorHandler(SetBG::handle_x_errors);
+        bool bGotText = XGetTextProperty(xdisp, curwindow, &tprop, nameatom);
+        XSetErrorHandler(old_x_error_handler);
+
+        if (bGotText && tprop.nitems)
+        {
+            if (XTextPropertyToStringList(&tprop, &list, &num))
+            {
+                if (num == 1 && std::string(list[0]) == std::string("mutter guard window")) {
+
+                    SetBG::RootWindowData bgMutter(curwindow, SetBG::NAUTILUS, std::string(""));
+                    retVec.push_back(bgMutter);
+                }
+                XFreeStringList(list);
+            }
+            XFree(tprop.value);
+        }
     }
 
     // iterate all children of current window
@@ -270,7 +295,8 @@ SetBG::RootWindowData SetBG::check_window_type(Display *display, Window window)
                 if (strclass == std::string("Nautilus"))  retval.type = SetBG::NAUTILUS; else
                 if (strclass == std::string("Nemo"))      retval.type = SetBG::NEMO;     else
                 if (strclass == std::string("Pcmanfm"))   retval.type = SetBG::PCMANFM;  else
-                if (strclass == std::string("Conky"))     retval.type = SetBG::IGNORE;   else        // discard Conky!
+                if (strclass == std::string("Conky") || strclass == std::string("conky"))
+                    retval.type = SetBG::IGNORE;   else        // discard Conky!
                 {
                     std::cerr << "UNKNOWN ROOT WINDOW TYPE DETECTED (" << strclass << "), please file a bug\n";
                     retval.type = SetBG::UNKNOWN;
@@ -1191,7 +1217,7 @@ bool SetBGGnome::set_bg(Glib::ustring &disp, Glib::ustring file, SetMode mode, G
         case SetBG::SET_TILE:       strmode = "wallpaper"; break;
         case SetBG::SET_CENTER:     strmode = "centered"; break;
         case SetBG::SET_ZOOM:       strmode = "scaled"; break;
-        case SetBG::SET_ZOOM_FILL:
+        case SetBG::SET_ZOOM_FILL:  strmode = "spanned"; break;
         default:                    strmode = "zoom"; break;
 	};
 
@@ -1296,8 +1322,7 @@ Glib::ustring SetBGNemo::get_gsettings_key()
  */
 void SetBGNemo::set_show_desktop()
 {
-    Glib::RefPtr<Gio::Settings> settings = Gio::Settings::create(Glib::ustring("org.nemo.desktop"));
-    settings->set_boolean("draw-background", true);
+    // this space left blank as show-desktop no longer a thing in Nemo
 }
 
 /**
